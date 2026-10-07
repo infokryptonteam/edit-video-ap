@@ -156,7 +156,7 @@ export class App implements OnInit, OnDestroy {
       const source: CanvasImageSource = bitmap ?? image!;
       const sourceWidth = bitmap?.width ?? image!.naturalWidth;
       const sourceHeight = bitmap?.height ?? image!.naturalHeight;
-      const scale = Math.min(1, 1600 / Math.max(sourceWidth, sourceHeight));
+      const scale = Math.min(1, 1280 / Math.max(sourceWidth, sourceHeight));
       const canvas = document.createElement('canvas');
       canvas.width = Math.max(1, Math.round(sourceWidth * scale));
       canvas.height = Math.max(1, Math.round(sourceHeight * scale));
@@ -305,21 +305,10 @@ export class App implements OnInit, OnDestroy {
 
   private async loadEncoderFromCdn(): Promise<boolean> {
     const baseUrl = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/esm';
-    const coreURL = await this.fetchAsBlobUrl(`${baseUrl}/ffmpeg-core.js`, 'text/javascript');
-    let wasmURL = '';
-    try {
-      wasmURL = await this.fetchAsBlobUrl(`${baseUrl}/ffmpeg-core.wasm`, 'application/wasm');
-      return await this.encoder!.load({ coreURL, wasmURL });
-    } finally {
-      URL.revokeObjectURL(coreURL);
-      if (wasmURL) URL.revokeObjectURL(wasmURL);
-    }
-  }
-
-  private async fetchAsBlobUrl(url: string, contentType: string): Promise<string> {
-    const response = await fetch(url);
-    if (!response.ok) throw new Error(`Could not load video encoder (${response.status}).`);
-    return URL.createObjectURL(new Blob([await response.arrayBuffer()], { type: contentType }));
+    return this.encoder!.load({
+      coreURL: `${baseUrl}/ffmpeg-core.js`,
+      wasmURL: `${baseUrl}/ffmpeg-core.wasm`,
+    });
   }
 
   private nextFrame(): Promise<void> {
