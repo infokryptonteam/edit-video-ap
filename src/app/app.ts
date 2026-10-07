@@ -284,10 +284,10 @@ export class App implements OnInit, OnDestroy {
 
   private async getEncoder(): Promise<FFmpeg> {
     if (!this.encoderReady) {
-      this.encoderStatus = 'Downloading video encoder (~31 MB). Keep the page open; this is needed once per session.';
+      this.encoderStatus = 'Loading compressed video encoder from this site…';
       this.exportStatus = this.encoderStatus;
       this.changeDetector.detectChanges();
-      this.encoderReady = this.loadEncoderFromCdn();
+      this.encoderReady = this.loadEncoderFromPages();
     }
     try {
       await this.encoderReady;
@@ -301,31 +301,13 @@ export class App implements OnInit, OnDestroy {
     return this.encoder;
   }
 
-  private async loadEncoderFromCdn(): Promise<boolean> {
-    const mirrors = [
-      'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/esm',
-      'https://unpkg.com/@ffmpeg/core@0.12.10/dist/esm',
-    ];
-    let lastError: unknown;
-
-    for (const [index, baseUrl] of mirrors.entries()) {
-      const encoder = this.createEncoder();
-      this.encoderStatus = `Loading video encoder from source ${index + 1} of ${mirrors.length}…`;
-      this.exportStatus = this.encoderStatus;
-      this.changeDetector.detectChanges();
-      try {
-        return await this.withTimeout(encoder.load({
-          coreURL: `${baseUrl}/ffmpeg-core.js`,
-          wasmURL: `${baseUrl}/ffmpeg-core.wasm`,
-        }), 45_000, 'Encoder download');
-      } catch (error) {
-        lastError = error;
-        encoder.terminate();
-        if (this.encoder === encoder) this.encoder = null;
-      }
-    }
-
-    throw lastError instanceof Error ? lastError : new Error('Video encoder could not load from either source.');
+  private loadEncoderFromPages(): Promise<boolean> {
+    const encoder = this.createEncoder();
+    const assets = new URL('ffmpeg/', document.baseURI);
+    return encoder.load({
+      coreURL: new URL('ffmpeg-core.js', assets).href,
+      wasmURL: new URL('ffmpeg-core.wasm', assets).href,
+    });
   }
 
   private createEncoder(): FFmpeg {

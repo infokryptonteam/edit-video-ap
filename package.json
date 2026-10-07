@@ -4,8 +4,8 @@
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
-    "build": "ng build",
-    "build:github": "ng build --base-href /edit-video-ap/",
+    "build": "ng build && node scripts/prepare-ffmpeg-assets.mjs",
+    "build:github": "ng build --base-href /edit-video-ap/ && node scripts/prepare-ffmpeg-assets.mjs",
     "watch": "ng build --watch --configuration development"
   },
   "private": true,

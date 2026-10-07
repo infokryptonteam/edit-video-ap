@@ -1,0 +1,4 @@
+/ffmpeg/ffmpeg-core.wasm
+  Content-Type: application/wasm
+  Content-Encoding: gzip
+  Cache-Control: public, max-age=31536000, immutable

@@ -17,7 +17,7 @@ Open `http://localhost:4200/`. Upload the pre-operative, post-operative, and hea
 npm run build
 ```
 
-MP4 creation runs in the browser using FFmpeg WebAssembly, loaded from a pinned jsDelivr URL when the first export starts. This keeps the encoder out of the Pages upload (Cloudflare limits individual assets to 25 MiB). Photos are not uploaded to a server; the first export requires an internet connection and can take longer on phones.
+MP4 creation runs in the browser using a gzip-compressed FFmpeg WebAssembly asset served from the site. The build compresses the pinned FFmpeg core so it stays below Cloudflare Pages' 25 MiB per-file limit. Photos are not uploaded to a server.
 
 ## Deploy to Cloudflare Pages
 
