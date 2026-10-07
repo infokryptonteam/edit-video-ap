@@ -66,7 +66,7 @@
     <button class="textAction" type="button" (click)="openEditor()">Edit case</button>
     <button id="next" type="button" aria-label="Next slide" (click)="showSlide(currentSlide + 1)">›</button>
     @if (videoUrl) {
-      <a class="textAction downloadAction" [href]="videoUrl" [download]="videoFilename" (click)="onVideoDownloadStarted()">Download MP4</a>
+      <a class="textAction downloadAction" [href]="videoUrl" [download]="videoFilename" (click)="onVideoDownloadStarted()">Download {{ videoFormat }}</a>
     } @else {
       <button class="textAction downloadAction" type="button" [disabled]="isDownloading || !allPhotosSelected" (click)="downloadMp4()">
         {{ isDownloading ? 'Creating…' : 'Create video' }}
@@ -96,7 +96,7 @@
         <div class="fileName">{{ photo.processing ? 'Optimizing photo for quick export…' : photo.fileName || 'No image selected' }}</div>
       </div>
     }
-    <div class="editorSub" style="margin-top: 10px">{{ downloadError || encoderStatus || 'Upload all three photos to enable MP4 download.' }}</div>
+    <div class="editorSub" style="margin-top: 10px">{{ downloadError || exportStatus || 'Upload all three photos to enable video download.' }}</div>
     <div class="actions">
       <button class="close" type="button" (click)="closeEditor()">Close</button>
       <button class="save" type="button" (click)="showPresentation()">Preview Presentation</button>

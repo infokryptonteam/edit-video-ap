@@ -53,8 +53,7 @@
                 "input": "public"
               }
             ],
-            "styles": ["src/styles.css"],
-            "allowedCommonJsDependencies": ["html2canvas"]
+            "styles": ["src/styles.css"]
           },
           "configurations": {
             "production": {

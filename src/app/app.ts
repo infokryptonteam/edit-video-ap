@@ -1,7 +1,6 @@
 import { ChangeDetectorRef, Component, OnDestroy, OnInit, inject } from '@angular/core';
 import { FormsModule } from '@angular/forms';
-import { FFmpeg } from '@ffmpeg/ffmpeg';
-import html2canvas from 'html2canvas';
+import { BufferTarget, CanvasSource, Mp4OutputFormat, Output, Quality } from 'mediabunny';
 
 interface ClinicalPhoto {
   title: string;
@@ -18,8 +17,6 @@ interface ClinicalPhoto {
 })
 export class App implements OnInit, OnDestroy {
   private readonly changeDetector = inject(ChangeDetectorRef);
-  private encoder: FFmpeg | null = null;
-  private encoderReady: Promise<boolean> | null = null;
   private timer: number | undefined;
   private touchStartX = 0;
   private photoLoadIds = [0, 0, 0];
@@ -32,9 +29,9 @@ export class App implements OnInit, OnDestroy {
   isDownloading = false;
   exportStatus = '';
   downloadError = '';
-  encoderStatus = '';
   videoUrl = '';
   videoFilename = '';
+  videoFormat = '';
   photos: ClinicalPhoto[] = [
     { title: 'Pre-Operative', fileName: '', src: '', processing: false },
     { title: 'Post-Operative', fileName: '', src: '', processing: false },
@@ -55,7 +52,6 @@ export class App implements OnInit, OnDestroy {
       if (photo.src.startsWith('blob:')) URL.revokeObjectURL(photo.src);
     }
     if (this.videoUrl) URL.revokeObjectURL(this.videoUrl);
-    this.encoder?.terminate();
   }
 
   showSlide(index: number): void {
@@ -119,7 +115,6 @@ export class App implements OnInit, OnDestroy {
         src: URL.createObjectURL(optimized),
         processing: false,
       };
-      this.prepareEncoder();
       this.changeDetector.detectChanges();
     });
     this.photoOptimizationQueue = optimization.catch(() => undefined);
@@ -194,84 +189,59 @@ export class App implements OnInit, OnDestroy {
       return;
     }
 
-    const slides = Array.from(document.querySelectorAll<HTMLElement>('#app #slides .slide'));
-    const originalDisplays = slides.map((slide) => slide.style.display);
-    const previousSlide = this.currentSlide;
+    if (typeof VideoEncoder !== 'function') {
+      this.downloadError = 'This browser cannot encode MP4. Please use an updated Safari or Chrome browser.';
+      this.editorOpen = true;
+      return;
+    }
+
     if (this.videoUrl) URL.revokeObjectURL(this.videoUrl);
     this.videoUrl = '';
     this.videoFilename = '';
+    this.videoFormat = '';
     this.isDownloading = true;
     this.downloadError = '';
-    this.exportStatus = 'Preparing video…';
+    this.exportStatus = 'Preparing the three photos…';
     this.changeDetector.detectChanges();
     window.clearInterval(this.timer);
 
     try {
-      const encoder = await this.withTimeout(this.getEncoder(), 120_000, 'Encoder startup');
-      const frameFiles: string[] = [];
-      await this.withTimeout(document.fonts.ready, 15_000, 'Font loading');
+      const images = await Promise.all(this.photos.map((photo) => this.loadPhoto(photo.src)));
+      const canvas = document.createElement('canvas');
+      canvas.width = 432;
+      canvas.height = 768;
+      const context = canvas.getContext('2d', { alpha: false });
+      if (!context) throw new Error('Could not prepare the video canvas.');
 
-      for (let index = 0; index < slides.length; index++) {
-        this.currentSlide = index;
-        slides.forEach((slide, slideIndex) => {
-          slide.style.display = slideIndex === index ? 'flex' : 'none';
-        });
-        await this.nextFrame();
-        if (!slides[index].clientWidth || !slides[index].clientHeight) {
-          throw new Error('Presentation layout is not visible. Keep the app open while creating the video.');
-        }
-        const image = slides[index].querySelector('img');
-        if (image?.decode) await image.decode();
+      const target = new BufferTarget();
+      const source = new CanvasSource(canvas, { codec: 'avc', quality: new Quality('low') });
+      const output = new Output({ format: new Mp4OutputFormat(), target });
+      output.addVideoTrack(source);
+      await output.start();
 
-        this.exportStatus = `Capturing slide ${index + 1} of ${slides.length}…`;
+      const slideDuration = 4;
+      for (let index = 0; index < images.length; index++) {
+        this.drawPhoto(context, images[index]);
+        this.exportStatus = `Encoding photo ${index + 1} of ${images.length}…`;
         this.changeDetector.detectChanges();
-        const canvas = await this.withTimeout(html2canvas(slides[index], {
-          backgroundColor: '#f8fbff',
-          logging: false,
-          scale: Math.min(2, 540 / slides[index].clientWidth),
-        }), 45_000, 'Slide capture');
-        const blob = await new Promise<Blob>((resolve, reject) => {
-          canvas.toBlob((result) => result ? resolve(result) : reject(new Error(`Could not capture slide ${index + 1} (${canvas.width}x${canvas.height}).`)), 'image/jpeg', 0.92);
-        });
-        const fileName = `slide-${index}.jpg`;
-        await encoder.writeFile(fileName, new Uint8Array(await blob.arrayBuffer()));
-        frameFiles.push(fileName);
+        await source.add(index * slideDuration, slideDuration);
       }
 
-      const concatList = frameFiles.map((file) => `file '${file}'\nduration 3`).join('\n') + `\nfile '${frameFiles[frameFiles.length - 1]}'\n`;
-      await encoder.writeFile('slides.txt', new TextEncoder().encode(concatList));
-      this.exportStatus = 'Encoding MP4…';
-      this.changeDetector.detectChanges();
-      const exitCode = await encoder.exec([
-        '-y', '-f', 'concat', '-safe', '0', '-i', 'slides.txt',
-        '-vf', 'fps=12,scale=432:768:force_original_aspect_ratio=decrease,pad=432:768:(ow-iw)/2:(oh-ih)/2:color=white,setsar=1,format=yuv420p',
-        '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28', '-movflags', '+faststart', 'case-video.mp4',
-      ], 180_000);
-      if (exitCode !== 0) throw new Error('MP4 encoding timed out or failed.');
-
-      const result = await encoder.readFile('case-video.mp4');
-      if (typeof result === 'string') throw new Error('The video encoder returned an invalid file.');
-      const video = new Blob([new Uint8Array(result)], { type: 'video/mp4' });
+      await output.finalize();
+      if (!target.buffer) throw new Error('MP4 encoding produced an empty file.');
+      const video = new Blob([target.buffer], { type: 'video/mp4' });
       this.videoUrl = URL.createObjectURL(video);
+      this.videoFormat = 'MP4';
       this.videoFilename = `${this.caseName.trim().replace(/[^a-z0-9]+/gi, '-') || 'clinical-case'}.mp4`;
       this.exportStatus = 'Video ready. Tap Download MP4 to save it.';
       this.changeDetector.detectChanges();
     } catch (error) {
       console.error('MP4 export failed', error);
-      const message = error instanceof Error ? error.message : '';
-      this.downloadError = message.includes('visible')
-        ? 'Keep this page open while creating the video, then try again.'
-        : message.includes('timed out') || message.includes('failed')
-          ? 'Video creation took too long or failed. Try smaller photos or another browser.'
-          : 'MP4 export failed. Try smaller photos or another browser.';
+      this.downloadError = error instanceof Error ? error.message : 'Video creation failed. Please try again.';
       this.exportStatus = '';
       this.editorOpen = true;
       this.changeDetector.detectChanges();
     } finally {
-      slides.forEach((slide, index) => {
-        slide.style.display = originalDisplays[index];
-      });
-      this.currentSlide = previousSlide;
       this.isDownloading = false;
       if (!this.editorOpen) this.startAutoplay();
       this.changeDetector.detectChanges();
@@ -282,80 +252,22 @@ export class App implements OnInit, OnDestroy {
     this.exportStatus = 'Download started.';
   }
 
-  private async getEncoder(): Promise<FFmpeg> {
-    if (!this.encoderReady) {
-      this.encoderStatus = 'Loading compressed video encoder from this site…';
-      this.exportStatus = this.encoderStatus;
-      this.changeDetector.detectChanges();
-      this.encoderReady = this.loadEncoderFromPages();
-    }
-    try {
-      await this.encoderReady;
-    } catch (error) {
-      this.encoderReady = null;
-      this.encoder?.terminate();
-      this.encoder = null;
-      throw error;
-    }
-    if (!this.encoder) throw new Error('Video encoder did not initialize.');
-    return this.encoder;
+  private async loadPhoto(src: string): Promise<HTMLImageElement> {
+    const image = new Image();
+    image.src = src;
+    await image.decode();
+    return image;
   }
 
-  private loadEncoderFromPages(): Promise<boolean> {
-    const encoder = this.createEncoder();
-    const assets = new URL('ffmpeg/', document.baseURI);
-    return encoder.load({
-      coreURL: new URL('ffmpeg-core.js', assets).href,
-      wasmURL: new URL('ffmpeg-core.wasm', assets).href,
-    });
-  }
-
-  private createEncoder(): FFmpeg {
-    const encoder = new FFmpeg();
-    encoder.on('progress', ({ progress }) => {
-      const percentage = Math.round(Math.max(0, Math.min(99, Number.isFinite(progress) ? progress * 100 : 0)));
-      this.exportStatus = `Encoding MP4… ${percentage}%`;
-      this.changeDetector.detectChanges();
-    });
-    this.encoder = encoder;
-    return encoder;
-  }
-
-  private prepareEncoder(): void {
-    if (this.encoderReady) return;
-    void this.getEncoder().then(() => {
-      this.encoderStatus = 'Video encoder ready.';
-      this.changeDetector.detectChanges();
-    }).catch((error) => {
-      console.warn('Video encoder preload failed', error);
-      this.encoderStatus = 'Encoder could not load. Check your connection; Create video will retry.';
-      this.changeDetector.detectChanges();
-    });
-  }
-
-  private nextFrame(): Promise<void> {
-    return new Promise((resolve) => {
-      let settled = false;
-      let fallback: number;
-      const finish = () => {
-        if (settled) return;
-        settled = true;
-        window.clearTimeout(fallback);
-        resolve();
-      };
-      fallback = window.setTimeout(finish, 100);
-      requestAnimationFrame(() => requestAnimationFrame(finish));
-    });
-  }
-
-  private withTimeout<T>(task: Promise<T>, timeoutMs: number, label: string): Promise<T> {
-    let timeout: number;
-    return Promise.race([
-      task,
-      new Promise<T>((_, reject) => {
-        timeout = window.setTimeout(() => reject(new Error(`${label} timed out.`)), timeoutMs);
-      }),
-    ]).finally(() => window.clearTimeout(timeout));
+  private drawPhoto(context: CanvasRenderingContext2D, image: HTMLImageElement): void {
+    const width = 432;
+    const height = 768;
+    const scale = Math.min(width / image.naturalWidth, height / image.naturalHeight);
+    const drawWidth = image.naturalWidth * scale;
+    const drawHeight = image.naturalHeight * scale;
+    context.fillStyle = '#ffffff';
+    context.fillRect(0, 0, width, height);
+    context.drawImage(image, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight);
   }
 
   private startAutoplay(): void {

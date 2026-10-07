@@ -17,7 +17,7 @@ Open `http://localhost:4200/`. Upload the pre-operative, post-operative, and hea
 npm run build
 ```
 
-MP4 creation runs in the browser using a gzip-compressed FFmpeg WebAssembly asset served from the site. The build compresses the pinned FFmpeg core so it stays below Cloudflare Pages' 25 MiB per-file limit. Photos are not uploaded to a server.
+The video is a 9:16 slideshow containing only the three uploaded photos. WebCodecs and Mediabunny encode one timestamped H.264 frame per photo into an MP4. Photos are processed locally and are not uploaded to a server. The browser must support WebCodecs H.264 encoding.
 
 ## Deploy to Cloudflare Pages
 

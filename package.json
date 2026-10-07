@@ -4,8 +4,8 @@
   "scripts": {
     "ng": "ng",
     "start": "ng serve",
-    "build": "ng build && node scripts/prepare-ffmpeg-assets.mjs",
-    "build:github": "ng build --base-href /edit-video-ap/ && node scripts/prepare-ffmpeg-assets.mjs",
+    "build": "ng build",
+    "build:github": "ng build --base-href /edit-video-ap/",
     "watch": "ng build --watch --configuration development"
   },
   "private": true,
@@ -20,9 +20,7 @@
     "@angular/forms": "^22.2.0",
     "@angular/platform-browser": "^22.2.0",
     "@angular/router": "^22.2.0",
-    "@ffmpeg/core": "^0.12.10",
-    "@ffmpeg/ffmpeg": "^0.12.15",
-    "html2canvas": "^1.4.1",
+    "mediabunny": "^1.61.3",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0"
   },
