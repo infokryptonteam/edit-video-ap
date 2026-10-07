@@ -24,7 +24,7 @@ MP4 creation runs in the browser using the bundled FFmpeg WebAssembly core. Phot
 Use these Pages build settings:
 
 - Build command: `npm run build`
-- Build output directory: `dist/clinical-case-video/browser`
+- Build output directory: `dist/clinical-case-video`
 - Root directory: `/`
 - Node.js version: `22.22.3` (also pinned in `.nvmrc`)
 
