@@ -195,6 +195,10 @@ export class App implements OnInit, OnDestroy {
       return;
     }
 
+    const slides = Array.from(document.querySelectorAll<HTMLElement>('#app #slides .slide'));
+    const originalDisplays = slides.map((slide) => slide.style.display);
+    const originalAnimations = slides.map((slide) => slide.style.animation);
+    const previousSlide = this.currentSlide;
     if (this.videoUrl) URL.revokeObjectURL(this.videoUrl);
     this.videoUrl = '';
     this.videoFilename = '';
@@ -206,7 +210,17 @@ export class App implements OnInit, OnDestroy {
     window.clearInterval(this.timer);
 
     try {
-      const images = await Promise.all(this.photos.map((photo) => this.loadPhoto(photo.src)));
+      const support = await VideoEncoder.isConfigSupported({
+        codec: 'avc1.42001f',
+        width: 432,
+        height: 768,
+        bitrate: 1_000_000,
+        framerate: 12,
+      });
+      if (!support.supported) throw new Error('This browser does not support H.264 MP4 encoding.');
+
+      await this.withTimeout(document.fonts.ready, 15_000, 'Font loading');
+      const { default: html2canvas } = await import('html2canvas');
       const canvas = document.createElement('canvas');
       canvas.width = 432;
       canvas.height = 768;
@@ -220,9 +234,33 @@ export class App implements OnInit, OnDestroy {
       await output.start();
 
       const slideDuration = 4;
-      for (let index = 0; index < images.length; index++) {
-        this.drawPhoto(context, images[index]);
-        this.exportStatus = `Encoding photo ${index + 1} of ${images.length}…`;
+      for (let index = 0; index < slides.length; index++) {
+        this.currentSlide = index;
+        slides.forEach((slide, slideIndex) => {
+          slide.style.display = slideIndex === index ? 'flex' : 'none';
+          slide.style.animation = 'none';
+        });
+        await this.nextFrame();
+        if (!slides[index].clientWidth || !slides[index].clientHeight) {
+          throw new Error('The clinical slide is not visible. Keep the presentation open while creating the video.');
+        }
+        const image = slides[index].querySelector('img');
+        if (image?.decode) await image.decode();
+
+        this.exportStatus = `Rendering template slide ${index + 1} of ${slides.length}…`;
+        this.changeDetector.detectChanges();
+        const renderedSlide = await this.withTimeout(html2canvas(slides[index], {
+          backgroundColor: '#f8fbff',
+          logging: false,
+          scale: Math.min(2, 432 / slides[index].clientWidth),
+        }), 30_000, 'Template rendering');
+        const scale = Math.min(canvas.width / renderedSlide.width, canvas.height / renderedSlide.height);
+        const width = renderedSlide.width * scale;
+        const height = renderedSlide.height * scale;
+        context.fillStyle = '#ffffff';
+        context.fillRect(0, 0, canvas.width, canvas.height);
+        context.drawImage(renderedSlide, (canvas.width - width) / 2, (canvas.height - height) / 2, width, height);
+        this.exportStatus = `Encoding template slide ${index + 1} of ${slides.length}…`;
         this.changeDetector.detectChanges();
         await source.add(index * slideDuration, slideDuration);
       }
@@ -242,6 +280,11 @@ export class App implements OnInit, OnDestroy {
       this.editorOpen = true;
       this.changeDetector.detectChanges();
     } finally {
+      slides.forEach((slide, index) => {
+        slide.style.display = originalDisplays[index];
+        slide.style.animation = originalAnimations[index];
+      });
+      this.currentSlide = previousSlide;
       this.isDownloading = false;
       if (!this.editorOpen) this.startAutoplay();
       this.changeDetector.detectChanges();
@@ -252,22 +295,29 @@ export class App implements OnInit, OnDestroy {
     this.exportStatus = 'Download started.';
   }
 
-  private async loadPhoto(src: string): Promise<HTMLImageElement> {
-    const image = new Image();
-    image.src = src;
-    await image.decode();
-    return image;
+  private nextFrame(): Promise<void> {
+    return new Promise((resolve) => {
+      let settled = false;
+      let fallback: number;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        window.clearTimeout(fallback);
+        resolve();
+      };
+      fallback = window.setTimeout(finish, 100);
+      requestAnimationFrame(() => requestAnimationFrame(finish));
+    });
   }
 
-  private drawPhoto(context: CanvasRenderingContext2D, image: HTMLImageElement): void {
-    const width = 432;
-    const height = 768;
-    const scale = Math.min(width / image.naturalWidth, height / image.naturalHeight);
-    const drawWidth = image.naturalWidth * scale;
-    const drawHeight = image.naturalHeight * scale;
-    context.fillStyle = '#ffffff';
-    context.fillRect(0, 0, width, height);
-    context.drawImage(image, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight);
+  private withTimeout<T>(task: Promise<T>, timeoutMs: number, label: string): Promise<T> {
+    let timeout: number;
+    return Promise.race([
+      task,
+      new Promise<T>((_, reject) => {
+        timeout = window.setTimeout(() => reject(new Error(`${label} timed out.`)), timeoutMs);
+      }),
+    ]).finally(() => window.clearTimeout(timeout));
   }
 
   private startAutoplay(): void {
