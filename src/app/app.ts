@@ -32,6 +32,7 @@ export class App implements OnInit, OnDestroy {
   isDownloading = false;
   exportStatus = '';
   downloadError = '';
+  encoderStatus = '';
   videoUrl = '';
   videoFilename = '';
   photos: ClinicalPhoto[] = [
@@ -118,6 +119,7 @@ export class App implements OnInit, OnDestroy {
         src: URL.createObjectURL(optimized),
         processing: false,
       };
+      this.prepareEncoder();
       this.changeDetector.detectChanges();
     });
     this.photoOptimizationQueue = optimization.catch(() => undefined);
@@ -242,8 +244,8 @@ export class App implements OnInit, OnDestroy {
       this.changeDetector.detectChanges();
       const exitCode = await encoder.exec([
         '-y', '-f', 'concat', '-safe', '0', '-i', 'slides.txt',
-        '-vf', 'fps=24,scale=540:960:force_original_aspect_ratio=decrease,pad=540:960:(ow-iw)/2:(oh-ih)/2:color=white,setsar=1,format=yuv420p',
-        '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '25', '-movflags', '+faststart', 'case-video.mp4',
+        '-vf', 'fps=12,scale=432:768:force_original_aspect_ratio=decrease,pad=432:768:(ow-iw)/2:(oh-ih)/2:color=white,setsar=1,format=yuv420p',
+        '-c:v', 'libx264', '-preset', 'ultrafast', '-crf', '28', '-movflags', '+faststart', 'case-video.mp4',
       ], 180_000);
       if (exitCode !== 0) throw new Error('MP4 encoding timed out or failed.');
 
@@ -281,16 +283,9 @@ export class App implements OnInit, OnDestroy {
   }
 
   private async getEncoder(): Promise<FFmpeg> {
-    if (!this.encoder) {
-      this.encoder = new FFmpeg();
-      this.encoder.on('progress', ({ progress }) => {
-        const percentage = Math.round(Math.max(0, Math.min(99, Number.isFinite(progress) ? progress * 100 : 0)));
-        this.exportStatus = `Encoding MP4… ${percentage}%`;
-        this.changeDetector.detectChanges();
-      });
-    }
     if (!this.encoderReady) {
-      this.exportStatus = 'Loading video encoder…';
+      this.encoderStatus = 'Downloading video encoder (~31 MB). Keep the page open; this is needed once per session.';
+      this.exportStatus = this.encoderStatus;
       this.changeDetector.detectChanges();
       this.encoderReady = this.loadEncoderFromCdn();
     }
@@ -298,16 +293,61 @@ export class App implements OnInit, OnDestroy {
       await this.encoderReady;
     } catch (error) {
       this.encoderReady = null;
+      this.encoder?.terminate();
+      this.encoder = null;
       throw error;
     }
+    if (!this.encoder) throw new Error('Video encoder did not initialize.');
     return this.encoder;
   }
 
   private async loadEncoderFromCdn(): Promise<boolean> {
-    const baseUrl = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/esm';
-    return this.encoder!.load({
-      coreURL: `${baseUrl}/ffmpeg-core.js`,
-      wasmURL: `${baseUrl}/ffmpeg-core.wasm`,
+    const mirrors = [
+      'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/esm',
+      'https://unpkg.com/@ffmpeg/core@0.12.10/dist/esm',
+    ];
+    let lastError: unknown;
+
+    for (const [index, baseUrl] of mirrors.entries()) {
+      const encoder = this.createEncoder();
+      this.encoderStatus = `Loading video encoder from source ${index + 1} of ${mirrors.length}…`;
+      this.exportStatus = this.encoderStatus;
+      this.changeDetector.detectChanges();
+      try {
+        return await this.withTimeout(encoder.load({
+          coreURL: `${baseUrl}/ffmpeg-core.js`,
+          wasmURL: `${baseUrl}/ffmpeg-core.wasm`,
+        }), 45_000, 'Encoder download');
+      } catch (error) {
+        lastError = error;
+        encoder.terminate();
+        if (this.encoder === encoder) this.encoder = null;
+      }
+    }
+
+    throw lastError instanceof Error ? lastError : new Error('Video encoder could not load from either source.');
+  }
+
+  private createEncoder(): FFmpeg {
+    const encoder = new FFmpeg();
+    encoder.on('progress', ({ progress }) => {
+      const percentage = Math.round(Math.max(0, Math.min(99, Number.isFinite(progress) ? progress * 100 : 0)));
+      this.exportStatus = `Encoding MP4… ${percentage}%`;
+      this.changeDetector.detectChanges();
+    });
+    this.encoder = encoder;
+    return encoder;
+  }
+
+  private prepareEncoder(): void {
+    if (this.encoderReady) return;
+    void this.getEncoder().then(() => {
+      this.encoderStatus = 'Video encoder ready.';
+      this.changeDetector.detectChanges();
+    }).catch((error) => {
+      console.warn('Video encoder preload failed', error);
+      this.encoderStatus = 'Encoder could not load. Check your connection; Create video will retry.';
+      this.changeDetector.detectChanges();
     });
   }
 

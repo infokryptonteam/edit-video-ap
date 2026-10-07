@@ -96,7 +96,7 @@
         <div class="fileName">{{ photo.processing ? 'Optimizing photo for quick export…' : photo.fileName || 'No image selected' }}</div>
       </div>
     }
-    <div class="editorSub" style="margin-top: 10px">{{ downloadError || 'Upload all three photos to enable MP4 download.' }}</div>
+    <div class="editorSub" style="margin-top: 10px">{{ downloadError || encoderStatus || 'Upload all three photos to enable MP4 download.' }}</div>
     <div class="actions">
       <button class="close" type="button" (click)="closeEditor()">Close</button>
       <button class="save" type="button" (click)="showPresentation()">Preview Presentation</button>
