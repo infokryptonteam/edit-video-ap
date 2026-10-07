@@ -65,9 +65,13 @@
     <button id="prev" type="button" aria-label="Previous slide" (click)="showSlide(currentSlide - 1)">‹</button>
     <button class="textAction" type="button" (click)="openEditor()">Edit case</button>
     <button id="next" type="button" aria-label="Next slide" (click)="showSlide(currentSlide + 1)">›</button>
-    <button class="textAction downloadAction" type="button" [disabled]="isDownloading || !allPhotosSelected" (click)="downloadMp4()">
-      {{ isDownloading ? 'Creating…' : 'Download MP4' }}
-    </button>
+    @if (videoUrl) {
+      <a class="textAction downloadAction" [href]="videoUrl" [download]="videoFilename" (click)="onVideoDownloadStarted()">Download MP4</a>
+    } @else {
+      <button class="textAction downloadAction" type="button" [disabled]="isDownloading || !allPhotosSelected" (click)="downloadMp4()">
+        {{ isDownloading ? 'Creating…' : 'Create video' }}
+      </button>
+    }
   </div>
   <div class="downloadStatus" aria-live="polite">{{ exportStatus }}</div>
   <div class="progress"><div class="bar" [style.width.%]="((currentSlide + 1) / (photos.length + 2)) * 100"></div></div>
@@ -89,7 +93,7 @@
       <div class="imgRow">
         <div class="imgHead"><span class="num">{{ i + 1 }}</span><strong>{{ photo.title }}</strong></div>
         <label class="upload">＋ Choose image from device<input type="file" accept="image/*" (change)="onImageSelected($event, i)" /></label>
-        <div class="fileName">{{ photo.fileName || 'No image selected' }}</div>
+        <div class="fileName">{{ photo.processing ? 'Optimizing photo for quick export…' : photo.fileName || 'No image selected' }}</div>
       </div>
     }
     <div class="editorSub" style="margin-top: 10px">{{ downloadError || 'Upload all three photos to enable MP4 download.' }}</div>
