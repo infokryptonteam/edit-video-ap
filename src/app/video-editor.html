@@ -1,0 +1,101 @@
+<div id="app" (touchstart)="onTouchStart($event)" (touchend)="onTouchEnd($event)">
+  <div id="slides">
+    <article class="slide" [class.active]="currentSlide === 0">
+      <div class="top">
+        <div class="doctor">Dr. Sanad Khandelwal</div>
+        <div class="clinic">Aarogwan Precancer and Dental Care Centre</div>
+        <div class="address">Aliganj Sector L, LUCKNOW</div>
+        <div class="phone">+91 88401 63449</div>
+      </div>
+      <div class="kicker">CLINICAL CASE</div>
+      <h1>{{ caseName }}</h1>
+      <div class="desc">Clinical case presentation</div>
+      <div class="caseCard">
+        <div><span>CASE</span><strong>{{ caseName }}</strong></div>
+        <div><span>DOCUMENTATION</span><strong>Clinical photographic record</strong></div>
+        <div><span>FOLLOW-UP</span><strong>Healing documented at {{ healingDays }} days</strong></div>
+      </div>
+      <div class="introNote">Presented for clinical documentation and educational review.</div>
+    </article>
+
+    @for (photo of photos; track $index; let i = $index) {
+      <article class="slide" [class.active]="currentSlide === i + 1">
+        <div class="top">
+          <div class="doctor">Dr. Sanad Khandelwal</div>
+          <div class="clinic">Aarogwan Precancer and Dental Care Centre</div>
+          <div class="address">Aliganj Sector L, LUCKNOW</div>
+          <div class="phone">+91 88401 63449</div>
+        </div>
+        <div class="label">
+          {{ i === 0 ? '01 / PRE-OPERATIVE' : i === 1 ? '02 / POST-OPERATIVE' : '03 / HEALING • ' + healingDays + ' DAYS' }}
+        </div>
+        <div class="stage">{{ i === 2 ? 'Healing After ' + healingDays + ' Days' : photo.title }}</div>
+        <h2>{{ i === 2 ? 'Healing After ' + healingDays + ' Days' : photo.title }}</h2>
+        <div class="desc">
+          {{ i === 0 ? 'Clinical appearance before treatment' : i === 1 ? 'Clinical appearance after procedure' : 'Healing documented at ' + healingDays + ' days' }}
+        </div>
+        <div class="imageBox">
+          @if (photo.src) {
+            <img [src]="photo.src" [alt]="photo.title" />
+          } @else {
+            <div class="small">Image not selected</div>
+          }
+        </div>
+      </article>
+    }
+
+    <article class="slide" [class.active]="currentSlide === photos.length + 1">
+      <div class="top">
+        <div class="doctor">Dr. Sanad Khandelwal</div>
+        <div class="clinic">Aarogwan Precancer and Dental Care Centre</div>
+        <div class="address">Aliganj Sector L, LUCKNOW</div>
+        <div class="phone">+91 88401 63449</div>
+      </div>
+      <div class="kicker" style="margin-top: auto">CASE COMPLETE</div>
+      <h1>{{ caseName }}<br />Clinical Result</h1>
+      <div class="desc">Thank you for viewing this clinical case.</div>
+      <div class="end">
+        <div class="doc">Dr. Sanad Khandelwal</div>
+        <div class="clinicEnd">Aarogwan Precancer and Dental Care Centre<br />Aliganj Sector L, LUCKNOW</div>
+      </div>
+    </article>
+  </div>
+
+  <div class="controls" id="controls">
+    <button id="prev" type="button" aria-label="Previous slide" (click)="showSlide(currentSlide - 1)">‹</button>
+    <button class="textAction" type="button" (click)="openEditor()">Edit case</button>
+    <button id="next" type="button" aria-label="Next slide" (click)="showSlide(currentSlide + 1)">›</button>
+    <button class="textAction downloadAction" type="button" [disabled]="isDownloading || !allPhotosSelected" (click)="downloadMp4()">
+      {{ isDownloading ? 'Creating…' : 'Download MP4' }}
+    </button>
+  </div>
+  <div class="downloadStatus" aria-live="polite">{{ exportStatus }}</div>
+  <div class="progress"><div class="bar" [style.width.%]="((currentSlide + 1) / (photos.length + 2)) * 100"></div></div>
+
+  <section id="editor" [class.open]="editorOpen" aria-label="Clinical case editor">
+    <div class="editorHead">Clinical Case Editor</div>
+    <div class="editorSub">Add the clinical photos and update the case details.</div>
+    <div class="sectionTitle">CASE INFORMATION</div>
+    <div class="field">
+      <label for="caseName">DISEASE / CASE NAME</label>
+      <input id="caseName" [(ngModel)]="caseName" />
+    </div>
+    <div class="field">
+      <label for="healingDays">HEALING PERIOD (DAYS)</label>
+      <input id="healingDays" type="number" min="1" max="365" step="1" [ngModel]="healingDays" (ngModelChange)="setHealingDays($event)" />
+    </div>
+    <div class="sectionTitle">CLINICAL IMAGES</div>
+    @for (photo of photos; track $index; let i = $index) {
+      <div class="imgRow">
+        <div class="imgHead"><span class="num">{{ i + 1 }}</span><strong>{{ photo.title }}</strong></div>
+        <label class="upload">＋ Choose image from device<input type="file" accept="image/*" (change)="onImageSelected($event, i)" /></label>
+        <div class="fileName">{{ photo.fileName || 'No image selected' }}</div>
+      </div>
+    }
+    <div class="editorSub" style="margin-top: 10px">{{ downloadError || 'Upload all three photos to enable MP4 download.' }}</div>
+    <div class="actions">
+      <button class="close" type="button" (click)="closeEditor()">Close</button>
+      <button class="save" type="button" (click)="showPresentation()">Preview Presentation</button>
+    </div>
+  </section>
+</div>
