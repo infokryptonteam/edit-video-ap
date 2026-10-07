@@ -51,11 +51,6 @@
               {
                 "glob": "**/*",
                 "input": "public"
-              },
-              {
-                "glob": "ffmpeg-core.*",
-                "input": "node_modules/@ffmpeg/core/dist/esm",
-                "output": "ffmpeg/"
               }
             ],
             "styles": ["src/styles.css"],

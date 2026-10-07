@@ -290,11 +290,9 @@ export class App implements OnInit, OnDestroy {
       });
     }
     if (!this.encoderReady) {
-      const assets = new URL('ffmpeg/', document.baseURI);
-      this.encoderReady = this.encoder.load({
-        coreURL: new URL('ffmpeg-core.js', assets).href,
-        wasmURL: new URL('ffmpeg-core.wasm', assets).href,
-      });
+      this.exportStatus = 'Loading video encoder…';
+      this.changeDetector.detectChanges();
+      this.encoderReady = this.loadEncoderFromCdn();
     }
     try {
       await this.encoderReady;
@@ -303,6 +301,25 @@ export class App implements OnInit, OnDestroy {
       throw error;
     }
     return this.encoder;
+  }
+
+  private async loadEncoderFromCdn(): Promise<boolean> {
+    const baseUrl = 'https://cdn.jsdelivr.net/npm/@ffmpeg/core@0.12.10/dist/esm';
+    const coreURL = await this.fetchAsBlobUrl(`${baseUrl}/ffmpeg-core.js`, 'text/javascript');
+    let wasmURL = '';
+    try {
+      wasmURL = await this.fetchAsBlobUrl(`${baseUrl}/ffmpeg-core.wasm`, 'application/wasm');
+      return await this.encoder!.load({ coreURL, wasmURL });
+    } finally {
+      URL.revokeObjectURL(coreURL);
+      if (wasmURL) URL.revokeObjectURL(wasmURL);
+    }
+  }
+
+  private async fetchAsBlobUrl(url: string, contentType: string): Promise<string> {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Could not load video encoder (${response.status}).`);
+    return URL.createObjectURL(new Blob([await response.arrayBuffer()], { type: contentType }));
   }
 
   private nextFrame(): Promise<void> {
